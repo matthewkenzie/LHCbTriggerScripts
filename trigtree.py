@@ -263,18 +263,18 @@ def trigtree(gaudi, TES, mcfilterlocation, nevents, fname):
     trigcands = TES["/Event/Hlt/Candidates"]
     trigpvs = TES["/Event/Hlt/Vertex/PV3D"]
 
-    if not l0decision:
-      print 'WARNING -- no L0 decision found at: /Event/Trig/L0/L0DUReport'
-    if not hlt1decision:
-      print 'WARNING -- no HLT1 decision found at: /Event/Hlt1/SelReports'
-    if not mccands and mcfilterlocation!='':
-      print 'WARNING -- no MC candidates found at: /Event/MCFilter/Phys/%s/Particles'%mcfilterlocation
-    if not mcpvs and mcfilterlocation!='':
-      print 'WARNING -- no MC primary vertices found at: /Event/MCFilter/Rec/Vertex/Primary'
-    if not trigcands:
-      print 'WARNING -- no trigger candidates found at: /Event/Hlt/Candidates'
-    if not trigpvs:
-      print 'WARNING -- no trigger primary vertices found at: /Event/Hlt/Vertex/PV3D'
+    #if not l0decision:
+      #print 'WARNING -- no L0 decision found at: /Event/Trig/L0/L0DUReport'
+    #if not hlt1decision:
+      #print 'WARNING -- no HLT1 decision found at: /Event/Hlt1/SelReports'
+    #if not mccands and mcfilterlocation!='':
+      #print 'WARNING -- no MC candidates found at: /Event/MCFilter/Phys/%s/Particles'%mcfilterlocation
+    #if not mcpvs and mcfilterlocation!='':
+      #print 'WARNING -- no MC primary vertices found at: /Event/MCFilter/Rec/Vertex/Primary'
+    #if not trigcands:
+      #print 'WARNING -- no trigger candidates found at: /Event/Hlt/Candidates'
+    #if not trigpvs:
+      #print 'WARNING -- no trigger primary vertices found at: /Event/Hlt/Vertex/PV3D'
 
     # fill l0 info
     L0_Any[0]      = 0
