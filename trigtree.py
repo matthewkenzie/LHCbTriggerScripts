@@ -5,7 +5,7 @@ import GaudiPython
 def getIP(calc, track, vertex, ip, ipchi2):
   calc.distance(track, vertex ,ip ,ipchi2)
 
-def getMinIP(calc, track, vertices, result_ip, result_ipchi2):
+def getMinIP(calc, track, vertices):
   minip      = ROOT.Double(1.e10)
   minipchi2  = ROOT.Double(1.e10)
   for vertex in vertices:
@@ -15,9 +15,7 @@ def getMinIP(calc, track, vertices, result_ip, result_ipchi2):
     if ipchi2 < minipchi2:
       minip = ip
       minipchi2 = ipchi2
-
-  result_ip = minip
-  result_ipchi2 = minipchi2
+  return minip, minipchi2
 
 def getDira(particle, pv):
   p = particle.momentum()
@@ -237,6 +235,17 @@ def trigtree(gaudi, TES, mcfilterlocation, nevents, fname):
   outputTree.Branch('D0_ON_Daught2_IP_CHI2',      D0_ON_Daught2_IP_CHI2,      'D0_ON_Daught2_IP_CHI2[onCands]/D'),
   outputTree.Branch('D0_ON_Daught2_Track_CHI2',   D0_ON_Daught2_Track_CHI2,   'D0_ON_Daught2_Track_CHI2[onCands]/D'),
   outputTree.Branch('D0_ON_Daught2_Track_nDOF',   D0_ON_Daught2_Track_nDOF,   'D0_ON_Daught2_Track_nDOF[onCands]/D'),
+
+  # PVS
+  onPVs                     = array.array('i',[0])
+  ON_PV_X                   = array.array('d',maxarraylen*[0])
+  ON_PV_Y                   = array.array('d',maxarraylen*[0])
+  ON_PV_Z                   = array.array('d',maxarraylen*[0])
+
+  outputTree.Branch('onPVs',                      onPVs,                      'onPVs/I')
+  outputTree.Branch('ON_PV_X',                    ON_PV_X,                    'ON_PV_X[onPVs]/D')
+  outputTree.Branch('ON_PV_Y',                    ON_PV_Y,                    'ON_PV_Y[onPVs]/D')
+  outputTree.Branch('ON_PV_Z',                    ON_PV_Z,                    'ON_PV_Z[onPVs]/D')
  
   calc =  gaudi.toolsvc().create('LoKi::DistanceCalculator',interface ='IDistanceCalculator')
 
@@ -273,8 +282,8 @@ def trigtree(gaudi, TES, mcfilterlocation, nevents, fname):
       #print 'WARNING -- no MC primary vertices found at: /Event/MCFilter/Rec/Vertex/Primary'
     #if not trigcands:
       #print 'WARNING -- no trigger candidates found at: /Event/Hlt/Candidates'
-    #if not trigpvs:
-      #print 'WARNING -- no trigger primary vertices found at: /Event/Hlt/Vertex/PV3D'
+    if not trigpvs:
+      print 'WARNING -- no trigger primary vertices found at: /Event/Hlt/Vertex/PV3D'
 
     # fill l0 info
     L0_Any[0]      = 0
@@ -387,10 +396,8 @@ def trigtree(gaudi, TES, mcfilterlocation, nevents, fname):
           D0_MC_Daught1_PT[i]          = daught1.pt()
           D0_MC_Daught1_Track_CHI2[i]  = track1.chi2()
           D0_MC_Daught1_Track_nDOF[i]  = track1.nDoF()
-          minip     = ROOT.Double(1.e10)
-          minipchi2 = ROOT.Double(1.e10)
           if mcpvs:
-            getMinIP(calc, track1, mcpvs, minip, minipchi2)
+            minip, minipchi2 = getMinIP(calc, track1, mcpvs)
             D0_MC_Daught1_IP[i]      = minip
             D0_MC_Daught1_IP_CHI2[i] = minipchi2
 
@@ -403,10 +410,8 @@ def trigtree(gaudi, TES, mcfilterlocation, nevents, fname):
           D0_MC_Daught2_PT[i]          = daught2.pt()
           D0_MC_Daught2_Track_CHI2[i]  = track2.chi2()
           D0_MC_Daught2_Track_nDOF[i]  = track2.nDoF()
-          minip     = ROOT.Double(1.e10)
-          minipchi2 = ROOT.Double(1.e10)
           if mcpvs:
-            getMinIP(calc, track2, mcpvs, minip, minipchi2)
+            minip, minipchi2 = getMinIP(calc, track2, mcpvs)
             D0_MC_Daught2_IP[i]      = minip
             D0_MC_Daught2_IP_CHI2[i] = minipchi2
         
@@ -421,7 +426,21 @@ def trigtree(gaudi, TES, mcfilterlocation, nevents, fname):
           D0_MC_FD_CHI2[i] = fdchi2
           D0_MC_CTAU[i]    = fd / betagamma
           D0_MC_TAU[i]     = ( fd /betagamma ) / 0.3
-          
+    
+    # init online pv arrays
+    onPVs[0] = 0
+    for i in range(maxarraylen):
+      ON_PV_X[i]                  = -99999.
+      ON_PV_Y[i]                  = -99999.
+      ON_PV_Z[i]                  = -99999.
+
+    if trigpvs:
+      for pv in trigpvs:
+        ON_PV_X[onPVs[0]] = pv.position().X()
+        ON_PV_Y[onPVs[0]] = pv.position().Y()
+        ON_PV_Z[onPVs[0]] = pv.position().Z()
+        onPVs[0] += 1
+
     # init trig arrays
     onCands[0] = 0
     for i in range(maxarraylen):
@@ -466,6 +485,9 @@ def trigtree(gaudi, TES, mcfilterlocation, nevents, fname):
         if candidate.currentStage().__getattribute__("is")('LHCb::Particle')():
           trigcand = candidate.currentStage().get('LHCb::Particle')()
           if not trigcand.isBasicParticle():
+            #print 'CANDIDATE FOUND ------'
+            #print 'nPVs:', len(trigpvs)
+            if not trigcand.particleID().abspid()==333: continue
             D0_ON_M[onCands[0]]               = trigcand.momentum().M()
             D0_ON_P[onCands[0]]               = trigcand.p()
             D0_ON_PT[onCands[0]]              = trigcand.pt()
@@ -484,45 +506,45 @@ def trigtree(gaudi, TES, mcfilterlocation, nevents, fname):
 
             if len(trigcand.daughters())>0:
               daught1 = trigcand.daughters()[0]
-              track1  = trigcand.daughters()[0].proto().track()
-              D0_ON_Daught1_PID[onCands[0]]     = daught1.particleID().pid()
-              D0_ON_Daught1_M[onCands[0]]       = daught1.momentum().M()
-              D0_ON_Daught1_P[onCands[0]]       = daught1.p()
-              D0_ON_Daught1_PT[onCands[0]]      = daught1.pt()
-              D0_ON_Daught1_Track_CHI2[i]  = track1.chi2()
-              D0_ON_Daught1_Track_nDOF[i]  = track1.nDoF()
-              minip     = ROOT.Double(1.e10)
-              minipchi2 = ROOT.Double(1.e10)
-              if trigpvs:
-                getMinIP(calc, track1, trigpvs, minip, minipchi2)
-                D0_ON_Daught1_IP[onCands[0]]  = minip
-                D0_ON_Daught1_IP_CHI2[i] = minipchi2
+              if daught1.isBasicParticle() and daught1.proto().track():
+                track1  = daught1.proto().track()
+                D0_ON_Daught1_PID[onCands[0]]     = daught1.particleID().pid()
+                D0_ON_Daught1_M[onCands[0]]       = daught1.momentum().M()
+                D0_ON_Daught1_P[onCands[0]]       = daught1.p()
+                D0_ON_Daught1_PT[onCands[0]]      = daught1.pt()
+                D0_ON_Daught1_Track_CHI2[onCands[0]]  = track1.chi2()
+                D0_ON_Daught1_Track_nDOF[onCands[0]]  = track1.nDoF()
+                if trigpvs:
+                  minip, minipchi2 = getMinIP(calc, track1, trigpvs)
+                  D0_ON_Daught1_IP[onCands[0]]  = minip
+                  D0_ON_Daught1_IP_CHI2[onCands[0]] = minipchi2
+                  #print minip, minipchi2
 
             if len(trigcand.daughters())>1:
               daught2 = trigcand.daughters()[1]
-              track2  = trigcand.daughters()[1].proto().track()
-              D0_ON_Daught2_PID[onCands[0]]     = daught2.particleID().pid()
-              D0_ON_Daught2_M[onCands[0]]       = daught2.momentum().M()
-              D0_ON_Daught2_P[onCands[0]]       = daught2.p()
-              D0_ON_Daught2_PT[onCands[0]]      = daught2.pt()
-              D0_ON_Daught2_Track_CHI2[i]  = track2.chi2()
-              D0_ON_Daught2_Track_nDOF[i]  = track2.nDoF()
-              minip     = ROOT.Double(1.e10)
-              minipchi2 = ROOT.Double(1.e10)
-              if trigpvs:
-                getMinIP(calc, track2, trigpvs, minip, minipchi2)
-                D0_ON_Daught2_IP[onCands[0]]  = minip
-                D0_ON_Daught2_IP_CHI2[i] = minipchi2
+              if daught2.isBasicParticle() and daught2.proto().track():
+                track2  = daught2.proto().track()
+                D0_ON_Daught2_PID[onCands[0]]     = daught2.particleID().pid()
+                D0_ON_Daught2_M[onCands[0]]       = daught2.momentum().M()
+                D0_ON_Daught2_P[onCands[0]]       = daught2.p()
+                D0_ON_Daught2_PT[onCands[0]]      = daught2.pt()
+                D0_ON_Daught2_Track_CHI2[onCands[0]]  = track2.chi2()
+                D0_ON_Daught2_Track_nDOF[onCands[0]]  = track2.nDoF()
+                if trigpvs:
+                  minip, minipchi2 = getMinIP(calc, track2, trigpvs)
+                  D0_ON_Daught2_IP[onCands[0]]  = minip
+                  D0_ON_Daught2_IP_CHI2[onCands[0]] = minipchi2
+                  #print minip, minipchi2
             
             if trigpvs:
               trigpv = getPV(trigcand, trigpvs)
-              D0_ON_DIRA[i] = getDira(trigcand, trigpv)
+              D0_ON_DIRA[onCands[0]] = getDira(trigcand, trigpv)
               fd     = ROOT.Double(0.)
               fdchi2 = ROOT.Double(0.)
               getFD(calc, trigcand, trigpv, fd, fdchi2)
               betagamma = trigcand.momentum().P() / trigcand.momentum().M()
               D0_ON_FD[onCands[0]]  = fd
-              D0_ON_FD_CHI2[i] = fdchi2
+              D0_ON_FD_CHI2[onCands[0]] = fdchi2
               D0_ON_CTAU[onCands[0]]= fd / betagamma
               D0_ON_TAU[onCands[0]] = ( fd /betagamma ) / 0.3
               
