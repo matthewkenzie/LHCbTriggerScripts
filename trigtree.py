@@ -1,6 +1,36 @@
 import ROOT
 import array
 import GaudiPython
+import sys
+
+L0_Lines = ['Hadron','Electron','Photon','Muon','DiMuon']
+HLT1_Lines = [ 'Hlt1TrackAllL0','Hlt1TrackMVA','Hlt1TwoTrackMVA','Hlt1CalibTrackingKPi','Hlt1CalibTrackingKK','Hlt1CalibTrackingPiPi','Hlt1CalibTrackingKPiDetached','Hlt1B2HH_LTUNB_KPi','Hlt1B2HH_LTUNB_KK','Hlt1B2HH_LTUNB_PiPi','Hlt1IncPhi','Hlt1B2PhiPhi_LTUNB','Hlt1B2PhiGamma_LTUNB']
+branches = [  
+              (  'M',         'F' ),
+              (  'P',         'F' ),
+              (  'PT',        'F'),
+              (  'PX',        'F' ), 
+              (  'PY',        'F' ), 
+              (  'PZ',        'F' ), 
+              (  'PE',        'F' ), 
+              (  'PID',       'I' ),
+              (  'VTX_X',     'F' ), 
+              (  'VTX_Y',     'F' ),
+              (  'VTX_Z',     'F' ), 
+              (  'VTX_CHI2',  'F' ),
+              (  'VTX_DOF',   'I' ),
+              (  'DIRA',      'F' ), 
+              (  'IP',        'F' ), 
+              (  'IP_CHI2',   'F' ), 
+              (  'FD',        'F' ), 
+              (  'FD_CHI2',   'F' ), 
+              (  'CTAU',      'F' ), 
+              (  'TAU' ,      'F' ),
+              (  'TR_CHI2' ,  'F' ),
+              (  'TR_DOF' ,   'I' ),
+              (  'TR_IP' ,    'F' ),
+              (  'TR_IP_CHI2','F' )
+            ]
 
 def getIP(calc, track, vertex, ip, ipchi2):
   calc.distance(track, vertex ,ip ,ipchi2)
@@ -41,218 +71,153 @@ def getPV(particle, pvs):
       bestdira = dira
   return assocpv
 
+def setVal( val, name, branch_holder, iCand=0 ):
+  
+  if not branch_holder.has_key(name):
+    sys.exit('ERROR -- branch holder has no key named for branch name '+name)
+  branch_holder[name][iCand] = val
+
+def fillCandInfo( calc, branch_holder, iCand, name, particle, pvs):
+
+  setVal( particle.momentum().M()       , '%s_M'%name,   branch_holder, iCand )
+  setVal( particle.p()                  , '%s_P'%name,   branch_holder, iCand ) 
+  setVal( particle.pt()                 , '%s_PT'%name,  branch_holder, iCand )
+  setVal( particle.momentum().Px()      , '%s_PX'%name,  branch_holder, iCand )
+  setVal( particle.momentum().Py()      , '%s_PY'%name,  branch_holder, iCand )
+  setVal( particle.momentum().Pz()      , '%s_PZ'%name,  branch_holder, iCand )
+  setVal( particle.momentum().E()       , '%s_PE'%name,  branch_holder, iCand )
+  setVal( particle.particleID().pid()   , '%s_PID'%name, branch_holder, iCand )
+  
+  if particle.endVertex():
+    setVal( particle.endVertex().position().X() , '%s_VTX_X'%name,    branch_holder, iCand )
+    setVal( particle.endVertex().position().Y() , '%s_VTX_Y'%name,    branch_holder, iCand )
+    setVal( particle.endVertex().position().Z() , '%s_VTX_Z'%name,    branch_holder, iCand )
+    setVal( particle.endVertex().chi2()         , '%s_VTX_CHI2'%name, branch_holder, iCand )
+    setVal( particle.endVertex().nDoF()         , '%s_VTX_DOF'%name,  branch_holder, iCand )
+
+    if pvs:
+      pv   = getPV(particle, pvs)
+      dira = getDira(particle,pv)
+      ip     = ROOT.Double(0.)
+      ipchi2 = ROOT.Double(0.)
+      getIP(calc, particle, pv, ip, ipchi2)
+      fd     = ROOT.Double(0.)
+      fdchi2 = ROOT.Double(0.)
+      getFD(calc, particle, pv, fd, fdchi2)
+      betagamma = particle.momentum().P() / particle.momentum().M()
+      ctau = fd / betagamma
+      tau = ( fd / betagamma ) / 0.3
+      setVal( dira ,   '%s_DIRA'%name,    branch_holder, iCand )
+      setVal( ip ,     '%s_IP'%name,      branch_holder, iCand )
+      setVal( ipchi2 , '%s_IP_CHI2'%name, branch_holder, iCand )
+      setVal( fd ,     '%s_FD'%name,      branch_holder, iCand )
+      setVal( fdchi2 , '%s_FD_CHI2'%name, branch_holder, iCand )
+      setVal( ctau ,   '%s_CTAU'%name,    branch_holder, iCand )
+      setVal( tau ,    '%s_TAU'%name,     branch_holder, iCand )
+
+  if particle.isBasicParticle():
+    track = particle.proto().track()
+    if track:
+      setVal( track.chi2(), '%s_TR_CHI2'%name,  branch_holder, iCand )
+      setVal( track.nDoF(), '%s_TR_DOF'%name,   branch_holder, iCand )
+      if pvs:
+        tr_ip, tr_ip_chi2 = getMinIP(calc, track, pvs)
+        setVal( tr_ip,      '%s_TR_IP'%name,        branch_holder, iCand )
+        setVal( tr_ip_chi2, '%s_TR_IP_CHI2'%name,   branch_holder, iCand )
+      
+  for i, daughter in enumerate(particle.daughters()):
+    fillCandInfo(calc, branch_holder, iCand, name+'_Daught%d'%(i+1), daughter, pvs)
+
+
+def fillPVInfo( branch_holder, iPV, name, pv ):
+  setVal( pv.position().X(), '%s_PV_X'%name, branch_holder, iPV )
+  setVal( pv.position().X(), '%s_PV_Y'%name, branch_holder, iPV )
+  setVal( pv.position().X(), '%s_PV_Z'%name, branch_holder, iPV )
+
+def initBranches( branch_holder ):
+
+  for name, arr in branch_holder.iteritems():
+    for i, val in enumerate(arr):
+      branch_holder[name][i] = -999999
+
+def setTreeBranches(tree, branch_holder):
+
+  ndaughts = 2
+  depth = 2 # i.e go to two daughters at depth 2
+  
+  maxarraylen = 500
+  cand_names = { 'MC_Mother'   : 'nMCCands' , 
+                 'Trig_Mother' : 'nTrigCands'
+               }
+  pv_names =   { 'MC_PV'   : 'nMCPVs',
+                 'Trig_PV' : 'nTrigPVs'
+               }
+
+  import itertools
+
+  branch_holder['L0_Any']      = array.array('i',[0])
+  branch_holder['L0_Physics']  = array.array('i',[0])
+  tree.Branch( 'L0_Any', branch_holder['L0_Any'], 'L0_Any/I')
+  tree.Branch( 'L0_Physics', branch_holder['L0_Physics'], 'L0_Physics/I')
+  for l0 in L0_Lines:
+    br_name = 'L0_%s'%l0
+    branch_holder[br_name] = array.array('i',[0])
+    tree.Branch( br_name, branch_holder[br_name], '%s/I'%br_name )
+  for hlt1 in HLT1_Lines:
+    branch_holder[hlt1] = array.array('i',[0])
+    tree.Branch( hlt1, branch_holder[hlt1], '%s/I'%hlt1 )
+  
+  branch_holder['nMCCands']    =  array.array('i',[0])
+  branch_holder['nMCPVs']      =  array.array('i',[0]) 
+  branch_holder['nTrigCands']  =  array.array('i',[0])
+  branch_holder['nTrigPVs']    =  array.array('i',[0]) 
+  tree.Branch( 'nMCCands'  , branch_holder['nMCCands']  , 'nMCCands/I'   )
+  tree.Branch( 'nMCPVs'    , branch_holder['nMCPVs']    , 'nMCPVs/I'     )
+  tree.Branch( 'nTrigCands', branch_holder['nTrigCands'], 'nTrigCands/I' )
+  tree.Branch( 'nTrigPVs'  , branch_holder['nTrigPVs']  , 'nTrigPVs/I'   )
+  
+  for name, number in cand_names.iteritems():
+    for branch, typ in branches:
+      br_name = name+'_'+branch
+      branch_holder[br_name] = array.array(typ.lower(),maxarraylen*[0])
+      tree.Branch( br_name, branch_holder[br_name], '%s[%s]/%s'%(br_name, number, typ) ) 
+    for d in range(1,depth+1):
+      a = itertools.product(range(1,ndaughts+1),repeat=d)
+      for item in a:
+        sub_name = name
+        for i in item:
+          sub_name += '_Daught'+str(i)
+          for branch, typ in branches:
+            br_name = sub_name+'_'+branch
+            branch_holder[br_name] = array.array(typ.lower(),maxarraylen*[0])
+            tree.Branch( br_name, branch_holder[br_name], '%s[%s]/%s'%(br_name, number, typ) ) 
+  
+  for name, number in pv_names.iteritems():
+    branch_holder['%s_PV_X'%name] = array.array('f', maxarraylen*[0])
+    branch_holder['%s_PV_Y'%name] = array.array('f', maxarraylen*[0])
+    branch_holder['%s_PV_Z'%name] = array.array('f', maxarraylen*[0])
+    tree.Branch( '%s_PV_X'%name, branch_holder['%s_PV_X'%name], '%s_PV_X[%s]/F'%(name,number) )
+    tree.Branch( '%s_PV_Y'%name, branch_holder['%s_PV_Y'%name], '%s_PV_Y[%s]/F'%(name,number) )
+    tree.Branch( '%s_PV_Z'%name, branch_holder['%s_PV_Z'%name], '%s_PV_Z[%s]/F'%(name,number) )
+
 def trigtree(gaudi, TES, mcfilterlocation, nevents, fname):
 
   outputFile = ROOT.TFile(fname, 'RECREATE')
   outputTree = ROOT.TTree('TriggerAnalysisTree','Trigger Analysis Tree For Signal MC')
+  res_tuple = {}
+  setTreeBranches( outputTree, res_tuple )
   
-  maxarraylen = 500
+  # need to adjust so can hold arrays of candidates -- BUS!
 
-  # L0 Dec branches
-  L0_Any                    = array.array('i',[0])
-  L0_Physics                = array.array('i',[0])
-  L0_Hadron                 = array.array('i',[0])
-  L0_Photon                 = array.array('i',[0])
-  L0_Electron               = array.array('i',[0])
-  L0_Muon                   = array.array('i',[0])
-  L0_DiMuon                 = array.array('i',[0])
-  outputTree.Branch('L0_Any',                 L0_Any,                'L0_Any/I')
-  outputTree.Branch('L0_Physics',             L0_Physics,            'L0_Physics/I')
-  outputTree.Branch('L0_Hadron',              L0_Hadron,             'L0_Hadron/I')
-  outputTree.Branch('L0_Electron',            L0_Electron,           'L0_Electron/I')
-  outputTree.Branch('L0_Photon',              L0_Photon,             'L0_Photon/I')
-  outputTree.Branch('L0_Muon',                L0_Muon,               'L0_Muon/I')
-  outputTree.Branch('L0_DiMuon',              L0_DiMuon,             'L0_DiMuon/I')
-
-  # HLT1 Dec branches               
-  Hlt1TrackAllL0            = array.array('i',[0])
-  Hlt1TrackMVA              = array.array('i',[0])
-  Hlt1TwoTrackMVA           = array.array('i',[0])
-  Hlt1CalibTrackingKPi      = array.array('i',[0]) 
-  Hlt1CalibTrackingKK       = array.array('i',[0])
-  Hlt1CalibTrackingPiPi     = array.array('i',[0])
-  Hlt1B2HH_LTUNB_KPi        = array.array('i',[0])
-  Hlt1B2HH_LTUNB_KK         = array.array('i',[0])
-  Hlt1B2HH_LTUNB_PiPi       = array.array('i',[0])
-  Hlt1IncPhi                = array.array('i',[0])
-  Hlt1B2PhiPhi_LTUNB        = array.array('i',[0])
-  Hlt1B2PhiGamma_LTUNB      = array.array('i',[0])
-  outputTree.Branch('Hlt1TrackAllL0',         Hlt1TrackAllL0,        'Hlt1TrackAllL0/I')              
-  outputTree.Branch('Hlt1TrackMVA',           Hlt1TrackMVA,          'Hlt1TrackMVA/I')              
-  outputTree.Branch('Hlt1TwoTrackMVA',        Hlt1TwoTrackMVA,       'Hlt1TwoTrackMVA /I')          
-  outputTree.Branch('Hlt1CalibTrackingKPi',   Hlt1CalibTrackingKPi,  'Hlt1CalibTrackingKPi/I')
-  outputTree.Branch('Hlt1CalibTrackingKK',    Hlt1CalibTrackingKK,   'Hlt1CalibTrackingKK/I')
-  outputTree.Branch('Hlt1CalibTrackingPiPi',  Hlt1CalibTrackingPiPi, 'Hlt1CalibTrackingPiPi/I')
-  outputTree.Branch('Hlt1B2HH_LTUNB_KPi',     Hlt1B2HH_LTUNB_KPi,    'Hlt1B2HH_LTUNB_KPi/I')
-  outputTree.Branch('Hlt1B2HH_LTUNB_KK',      Hlt1B2HH_LTUNB_KK,     'Hlt1B2HH_LTUNB_KK/I')
-  outputTree.Branch('Hlt1B2HH_LTUNB_PiPi',    Hlt1B2HH_LTUNB_PiPi,   'Hlt1B2HH_LTUNB_PiPi/I')
-  outputTree.Branch('Hlt1IncPhi',             Hlt1IncPhi,            'Hlt1IncPhi/I')
-  outputTree.Branch('Hlt1B2PhiPhi_LTUNB',     Hlt1B2PhiPhi_LTUNB,    'Hlt1B2PhiPhi_LTUNB/I')
-  outputTree.Branch('Hlt1B2PhiGamma_LTUNB',   Hlt1B2PhiGamma_LTUNB,  'Hlt1B2PhiGamma_LTUNB/I')
- 
-  # MC Candidates
-  mcCands                   = array.array('i',[0])
-  D0_MC_M                   = array.array('d',maxarraylen*[0])
-  D0_MC_P                   = array.array('d',maxarraylen*[0])
-  D0_MC_PT                  = array.array('d',maxarraylen*[0])
-  D0_MC_PX                  = array.array('d',maxarraylen*[0])
-  D0_MC_PY                  = array.array('d',maxarraylen*[0])
-  D0_MC_PZ                  = array.array('d',maxarraylen*[0])
-  D0_MC_E                   = array.array('d',maxarraylen*[0])
-  D0_MC_PID                 = array.array('i',maxarraylen*[0])
-  D0_MC_VTX_X               = array.array('d',maxarraylen*[0])
-  D0_MC_VTX_Y               = array.array('d',maxarraylen*[0])
-  D0_MC_VTX_Z               = array.array('d',maxarraylen*[0])
-  D0_MC_VTX_CHI2            = array.array('d',maxarraylen*[0])
-  D0_MC_VTX_nDOF            = array.array('d',maxarraylen*[0])
-  D0_MC_DIRA                = array.array('d',maxarraylen*[0])
-  D0_MC_FD                  = array.array('d',maxarraylen*[0])
-  D0_MC_FD_CHI2             = array.array('d',maxarraylen*[0])
-  D0_MC_CTAU                = array.array('d',maxarraylen*[0])
-  D0_MC_TAU                 = array.array('d',maxarraylen*[0])
-  D0_MC_Daught1_PID         = array.array('i',maxarraylen*[0])
-  D0_MC_Daught1_M           = array.array('d',maxarraylen*[0])
-  D0_MC_Daught1_P           = array.array('d',maxarraylen*[0])
-  D0_MC_Daught1_PT          = array.array('d',maxarraylen*[0])
-  D0_MC_Daught1_IP          = array.array('d',maxarraylen*[0])
-  D0_MC_Daught1_IP_CHI2     = array.array('d',maxarraylen*[0])
-  D0_MC_Daught1_Track_CHI2  = array.array('d',maxarraylen*[0])
-  D0_MC_Daught1_Track_nDOF  = array.array('d',maxarraylen*[0])
-  D0_MC_Daught2_PID         = array.array('i',maxarraylen*[0])
-  D0_MC_Daught2_M           = array.array('d',maxarraylen*[0])
-  D0_MC_Daught2_P           = array.array('d',maxarraylen*[0])
-  D0_MC_Daught2_PT          = array.array('d',maxarraylen*[0])
-  D0_MC_Daught2_IP          = array.array('d',maxarraylen*[0])
-  D0_MC_Daught2_IP_CHI2     = array.array('d',maxarraylen*[0])
-  D0_MC_Daught2_Track_CHI2  = array.array('d',maxarraylen*[0])
-  D0_MC_Daught2_Track_nDOF  = array.array('d',maxarraylen*[0])
-  
-  outputTree.Branch('mcCands',                    mcCands,                    'mcCands/I')         
-  outputTree.Branch('D0_MC_M',                    D0_MC_M,                    'D0_MC_M[mcCands]/D'),
-  outputTree.Branch('D0_MC_P',                    D0_MC_P,                    'D0_MC_P[mcCands]/D'),
-  outputTree.Branch('D0_MC_PT',                   D0_MC_PT,                   'D0_MC_PT[mcCands]/D'),
-  outputTree.Branch('D0_MC_PX',                   D0_MC_PX,                   'D0_MC_PX[mcCands]/D'),
-  outputTree.Branch('D0_MC_PY',                   D0_MC_PY,                   'D0_MC_PY[mcCands]/D'),
-  outputTree.Branch('D0_MC_PZ',                   D0_MC_PZ,                   'D0_MC_PZ[mcCands]/D'),
-  outputTree.Branch('D0_MC_E',                    D0_MC_E,                    'D0_MC_E[mcCands]/D'),
-  outputTree.Branch('D0_MC_PID',                  D0_MC_PID,                  'D0_MC_PID[mcCands]/I'),
-  outputTree.Branch('D0_MC_VTX_X',                D0_MC_VTX_X,                'D0_MC_VTX_X[mcCands]/D'),
-  outputTree.Branch('D0_MC_VTX_Y',                D0_MC_VTX_Y,                'D0_MC_VTX_Y[mcCands]/D'),
-  outputTree.Branch('D0_MC_VTX_Z',                D0_MC_VTX_Z,                'D0_MC_VTX_Z[mcCands]/D'),
-  outputTree.Branch('D0_MC_VTX_CHI2',             D0_MC_VTX_CHI2,             'D0_MC_VTX_CHI2[mcCands]/D'),
-  outputTree.Branch('D0_MC_VTX_nDOF',             D0_MC_VTX_nDOF,             'D0_MC_VTX_nDOF[mcCands]/D'),
-  outputTree.Branch('D0_MC_DIRA',                 D0_MC_DIRA,                 'D0_MC_DIRA[mcCands]/D'),
-  outputTree.Branch('D0_MC_FD',                   D0_MC_FD,                   'D0_MC_FD[mcCands]/D'),
-  outputTree.Branch('D0_MC_FD_CHI2',              D0_MC_FD_CHI2,              'D0_MC_FD_CHI2[mcCands]/D'),
-  outputTree.Branch('D0_MC_CTAU',                 D0_MC_CTAU,                 'D0_MC_CTAU[mcCands]/D'),
-  outputTree.Branch('D0_MC_TAU',                  D0_MC_TAU,                  'D0_MC_TAU[mcCands]/D'),
-  outputTree.Branch('D0_MC_Daught1_PID',          D0_MC_Daught1_PID,          'D0_MC_Daught1_PID[mcCands]/I'),
-  outputTree.Branch('D0_MC_Daught1_M',            D0_MC_Daught1_M,            'D0_MC_Daught1_M[mcCands]/D'),
-  outputTree.Branch('D0_MC_Daught1_P',            D0_MC_Daught1_P,            'D0_MC_Daught1_P[mcCands]/D'),
-  outputTree.Branch('D0_MC_Daught1_PT',           D0_MC_Daught1_PT,           'D0_MC_Daught1_PT[mcCands]/D'),
-  outputTree.Branch('D0_MC_Daught1_IP',           D0_MC_Daught1_IP,           'D0_MC_Daught1_IP[mcCands]/D'),
-  outputTree.Branch('D0_MC_Daught1_IP_CHI2',      D0_MC_Daught1_IP_CHI2,      'D0_MC_Daught1_IP_CHI2[mcCands]/D'),
-  outputTree.Branch('D0_MC_Daught1_Track_CHI2',   D0_MC_Daught1_Track_CHI2,   'D0_MC_Daught1_Track_CHI2[mcCands]/D'),
-  outputTree.Branch('D0_MC_Daught1_Track_nDOF',   D0_MC_Daught1_Track_nDOF,   'D0_MC_Daught1_Track_nDOF[mcCands]/D'),
-  outputTree.Branch('D0_MC_Daught2_PID',          D0_MC_Daught2_PID,          'D0_MC_Daught2_PID[mcCands]/I'),
-  outputTree.Branch('D0_MC_Daught2_M',            D0_MC_Daught2_M,            'D0_MC_Daught2_M[mcCands]/D'),
-  outputTree.Branch('D0_MC_Daught2_P',            D0_MC_Daught2_P,            'D0_MC_Daught2_P[mcCands]/D'),
-  outputTree.Branch('D0_MC_Daught2_PT',           D0_MC_Daught2_PT,           'D0_MC_Daught2_PT[mcCands]/D'),
-  outputTree.Branch('D0_MC_Daught2_IP',           D0_MC_Daught2_IP,           'D0_MC_Daught2_IP[mcCands]/D'),
-  outputTree.Branch('D0_MC_Daught2_IP_CHI2',      D0_MC_Daught2_IP_CHI2,      'D0_MC_Daught2_IP_CHI2[mcCands]/D'),
-  outputTree.Branch('D0_MC_Daught2_Track_CHI2',   D0_MC_Daught2_Track_CHI2,   'D0_MC_Daught2_Track_CHI2[mcCands]/D'),
-  outputTree.Branch('D0_MC_Daught2_Track_nDOF',   D0_MC_Daught2_Track_nDOF,   'D0_MC_Daught2_Track_nDOF[mcCands]/D'),
- 
-  # Online Cands
-  onCands                   = array.array('i',[0])
-  D0_ON_M                   = array.array('d',maxarraylen*[0])
-  D0_ON_P                   = array.array('d',maxarraylen*[0])
-  D0_ON_PT                  = array.array('d',maxarraylen*[0])
-  D0_ON_PX                  = array.array('d',maxarraylen*[0])
-  D0_ON_PY                  = array.array('d',maxarraylen*[0])
-  D0_ON_PZ                  = array.array('d',maxarraylen*[0])
-  D0_ON_E                   = array.array('d',maxarraylen*[0])
-  D0_ON_PID                 = array.array('i',maxarraylen*[0])
-  D0_ON_VTX_X               = array.array('d',maxarraylen*[0])
-  D0_ON_VTX_Y               = array.array('d',maxarraylen*[0])
-  D0_ON_VTX_Z               = array.array('d',maxarraylen*[0])
-  D0_ON_VTX_CHI2            = array.array('d',maxarraylen*[0])
-  D0_ON_VTX_nDOF            = array.array('d',maxarraylen*[0])
-  D0_ON_DIRA                = array.array('d',maxarraylen*[0])
-  D0_ON_FD                  = array.array('d',maxarraylen*[0])
-  D0_ON_FD_CHI2             = array.array('d',maxarraylen*[0])
-  D0_ON_CTAU                = array.array('d',maxarraylen*[0])
-  D0_ON_TAU                 = array.array('d',maxarraylen*[0])
-  D0_ON_Daught1_PID         = array.array('i',maxarraylen*[0])
-  D0_ON_Daught1_M           = array.array('d',maxarraylen*[0])
-  D0_ON_Daught1_P           = array.array('d',maxarraylen*[0])
-  D0_ON_Daught1_PT          = array.array('d',maxarraylen*[0])
-  D0_ON_Daught1_IP          = array.array('d',maxarraylen*[0])
-  D0_ON_Daught1_IP_CHI2     = array.array('d',maxarraylen*[0])
-  D0_ON_Daught1_Track_CHI2  = array.array('d',maxarraylen*[0])
-  D0_ON_Daught1_Track_nDOF  = array.array('d',maxarraylen*[0])
-  D0_ON_Daught2_PID         = array.array('i',maxarraylen*[0])
-  D0_ON_Daught2_M           = array.array('d',maxarraylen*[0])
-  D0_ON_Daught2_P           = array.array('d',maxarraylen*[0])
-  D0_ON_Daught2_PT          = array.array('d',maxarraylen*[0])
-  D0_ON_Daught2_IP          = array.array('d',maxarraylen*[0])
-  D0_ON_Daught2_IP_CHI2     = array.array('d',maxarraylen*[0])
-  D0_ON_Daught2_Track_CHI2  = array.array('d',maxarraylen*[0])
-  D0_ON_Daught2_Track_nDOF  = array.array('d',maxarraylen*[0])
-                            
-  outputTree.Branch('onCands',                    onCands,                    'onCands/I')         
-  outputTree.Branch('D0_ON_M',                    D0_ON_M,                    'D0_ON_M[onCands]/D'),
-  outputTree.Branch('D0_ON_P',                    D0_ON_P,                    'D0_ON_P[onCands]/D'),
-  outputTree.Branch('D0_ON_PT',                   D0_ON_PT,                   'D0_ON_PT[onCands]/D'),
-  outputTree.Branch('D0_ON_PX',                   D0_ON_PX,                   'D0_ON_PX[onCands]/D'),
-  outputTree.Branch('D0_ON_PY',                   D0_ON_PY,                   'D0_ON_PY[onCands]/D'),
-  outputTree.Branch('D0_ON_PZ',                   D0_ON_PZ,                   'D0_ON_PZ[onCands]/D'),
-  outputTree.Branch('D0_ON_E',                    D0_ON_E,                    'D0_ON_E[onCands]/D'),
-  outputTree.Branch('D0_ON_PID',                  D0_ON_PID,                  'D0_ON_PID[onCands]/I'),
-  outputTree.Branch('D0_ON_VTX_X',                D0_ON_VTX_X,                'D0_ON_VTX_X[onCands]/D'),
-  outputTree.Branch('D0_ON_VTX_Y',                D0_ON_VTX_Y,                'D0_ON_VTX_Y[onCands]/D'),
-  outputTree.Branch('D0_ON_VTX_Z',                D0_ON_VTX_Z,                'D0_ON_VTX_Z[onCands]/D'),
-  outputTree.Branch('D0_ON_VTX_CHI2',             D0_ON_VTX_CHI2,             'D0_ON_VTX_CHI2[onCands]/D'),
-  outputTree.Branch('D0_ON_VTX_nDOF',             D0_ON_VTX_nDOF,             'D0_ON_VTX_nDOF[onCands]/D'),
-  outputTree.Branch('D0_ON_DIRA',                 D0_ON_DIRA,                 'D0_ON_DIRA[onCands]/D'),
-  outputTree.Branch('D0_ON_FD',                   D0_ON_FD,                   'D0_ON_FD[onCands]/D'),
-  outputTree.Branch('D0_ON_FD_CHI2',              D0_ON_FD_CHI2,              'D0_ON_FD_CHI2[onCands]/D'),
-  outputTree.Branch('D0_ON_CTAU',                 D0_ON_CTAU,                 'D0_ON_CTAU[onCands]/D'),
-  outputTree.Branch('D0_ON_TAU',                  D0_ON_TAU,                  'D0_ON_TAU[onCands]/D'),
-  outputTree.Branch('D0_ON_Daught1_PID',          D0_ON_Daught1_PID,          'D0_ON_Daught1_PID[onCands]/I'),
-  outputTree.Branch('D0_ON_Daught1_M',            D0_ON_Daught1_M,            'D0_ON_Daught1_M[onCands]/D'),
-  outputTree.Branch('D0_ON_Daught1_P',            D0_ON_Daught1_P,            'D0_ON_Daught1_P[onCands]/D'),
-  outputTree.Branch('D0_ON_Daught1_PT',           D0_ON_Daught1_PT,           'D0_ON_Daught1_PT[onCands]/D'),
-  outputTree.Branch('D0_ON_Daught1_IP',           D0_ON_Daught1_IP,           'D0_ON_Daught1_IP[onCands]/D'),
-  outputTree.Branch('D0_ON_Daught1_IP_CHI2',      D0_ON_Daught1_IP_CHI2,      'D0_ON_Daught1_IP_CHI2[onCands]/D'),
-  outputTree.Branch('D0_ON_Daught1_Track_CHI2',   D0_ON_Daught1_Track_CHI2,   'D0_ON_Daught1_Track_CHI2[onCands]/D'),
-  outputTree.Branch('D0_ON_Daught1_Track_nDOF',   D0_ON_Daught1_Track_nDOF,   'D0_ON_Daught1_Track_nDOF[onCands]/D'),
-  outputTree.Branch('D0_ON_Daught2_PID',          D0_ON_Daught2_PID,          'D0_ON_Daught2_PID[onCands]/I'),
-  outputTree.Branch('D0_ON_Daught2_M',            D0_ON_Daught2_M,            'D0_ON_Daught2_M[onCands]/D'),
-  outputTree.Branch('D0_ON_Daught2_P',            D0_ON_Daught2_P,            'D0_ON_Daught2_P[onCands]/D'),
-  outputTree.Branch('D0_ON_Daught2_PT',           D0_ON_Daught2_PT,           'D0_ON_Daught2_PT[onCands]/D'),
-  outputTree.Branch('D0_ON_Daught2_IP',           D0_ON_Daught2_IP,           'D0_ON_Daught2_IP[onCands]/D'),
-  outputTree.Branch('D0_ON_Daught2_IP_CHI2',      D0_ON_Daught2_IP_CHI2,      'D0_ON_Daught2_IP_CHI2[onCands]/D'),
-  outputTree.Branch('D0_ON_Daught2_Track_CHI2',   D0_ON_Daught2_Track_CHI2,   'D0_ON_Daught2_Track_CHI2[onCands]/D'),
-  outputTree.Branch('D0_ON_Daught2_Track_nDOF',   D0_ON_Daught2_Track_nDOF,   'D0_ON_Daught2_Track_nDOF[onCands]/D'),
-
-  # PVS
-  onPVs                     = array.array('i',[0])
-  ON_PV_X                   = array.array('d',maxarraylen*[0])
-  ON_PV_Y                   = array.array('d',maxarraylen*[0])
-  ON_PV_Z                   = array.array('d',maxarraylen*[0])
-
-  outputTree.Branch('onPVs',                      onPVs,                      'onPVs/I')
-  outputTree.Branch('ON_PV_X',                    ON_PV_X,                    'ON_PV_X[onPVs]/D')
-  outputTree.Branch('ON_PV_Y',                    ON_PV_Y,                    'ON_PV_Y[onPVs]/D')
-  outputTree.Branch('ON_PV_Z',                    ON_PV_Z,                    'ON_PV_Z[onPVs]/D')
- 
   calc =  gaudi.toolsvc().create('LoKi::DistanceCalculator',interface ='IDistanceCalculator')
 
   print 'Will run', nevents, 'events'
                             
   for ev in range(nevents):
-
+    
+    # init storage tuple
+    initBranches( res_tuple )
+    
     gaudi.run(1)
 
     # check for raw event
@@ -286,270 +251,57 @@ def trigtree(gaudi, TES, mcfilterlocation, nevents, fname):
       print 'WARNING -- no trigger primary vertices found at: /Event/Hlt/Vertex/PV3D'
 
     # fill l0 info
-    L0_Any[0]      = 0
-    L0_Physics[0]  = 0
-    L0_Hadron[0]   = 0
-    L0_Photon[0]   = 0
-    L0_Electron[0] = 0
-    L0_Muon[0]     = 0
-    L0_DiMuon[0]   = 0
+    setVal(0, 'L0_Any',     res_tuple)
+    setVal(0, 'L0_Physics', res_tuple)
+    for l0 in L0_Lines:
+      setVal(0, 'L0_%s'%l0, res_tuple)
+
     if l0decision:
-      L0_Any[0]      = l0decision.decisionValue()
-      L0_Physics[0]  = l0decision.decisionFromSummary()
-      L0_Hadron[0]   = l0decision.channelDecisionByName('Hadron')
-      L0_Electron[0] = l0decision.channelDecisionByName('Electron')
-      L0_Photon[0]   = l0decision.channelDecisionByName('Photon')
-      L0_Muon[0]     = l0decision.channelDecisionByName('Muon')
-      L0_DiMuon[0]   = l0decision.channelDecisionByName('DiMuon')
+      setVal( l0decision.decisionValue(),       'L0_Any', res_tuple )
+      setVal( l0decision.decisionFromSummary(), 'L0_Physics', res_tuple )
+      for l0 in L0_Lines:
+        setVal( l0decision.channelDecisionByName(l0), 'L0_%s'%l0, res_tuple )
 
     # fill hlt1 info
-    Hlt1TrackAllL0[0]          = 0
-    Hlt1TrackMVA[0]            = 0
-    Hlt1TwoTrackMVA[0]         = 0
-    Hlt1CalibTrackingKPi[0]    = 0 
-    Hlt1CalibTrackingKK[0]     = 0
-    Hlt1CalibTrackingPiPi[0]   = 0
-    Hlt1B2HH_LTUNB_KPi[0]      = 0
-    Hlt1B2HH_LTUNB_KK[0]       = 0
-    Hlt1B2HH_LTUNB_PiPi[0]     = 0
-    Hlt1IncPhi[0]              = 0
-    Hlt1B2PhiPhi_LTUNB[0]      = 0
-    Hlt1B2PhiGamma_LTUNB[0]    = 0
+    for hlt1 in HLT1_Lines:
+      setVal( 0, hlt1, res_tuple)
+
     if hlt1decision:
-      Hlt1TrackAllL0[0]          = hlt1decision.hasSelectionName('Hlt1TrackAllL0Decision')
-      Hlt1TrackMVA[0]            = hlt1decision.hasSelectionName('Hlt1TrackMVADecision')
-      Hlt1TwoTrackMVA[0]         = hlt1decision.hasSelectionName('Hlt1TwoTrackMVADecision')
-      Hlt1CalibTrackingKPi[0]    = hlt1decision.hasSelectionName('Hlt1CalibTrackingKPiDecision')
-      Hlt1CalibTrackingKK[0]     = hlt1decision.hasSelectionName('Hlt1CalibTrackingKKDecision')
-      Hlt1CalibTrackingPiPi[0]   = hlt1decision.hasSelectionName('Hlt1CalibTrackingPiPiDecision')
-      Hlt1B2HH_LTUNB_KPi[0]      = hlt1decision.hasSelectionName('Hlt1B2HH_LTUNB_KPiDecision')
-      Hlt1B2HH_LTUNB_KK[0]       = hlt1decision.hasSelectionName('Hlt1B2HH_LTUNB_KKDecision')
-      Hlt1B2HH_LTUNB_PiPi[0]     = hlt1decision.hasSelectionName('Hlt1B2HH_LTUNB_PiPiDecision')
-      Hlt1IncPhi[0]              = hlt1decision.hasSelectionName('Hlt1IncPhiDecision')
-      Hlt1B2PhiPhi_LTUNB[0]      = hlt1decision.hasSelectionName('Hlt1B2PhiPhi_LTUNBDecision')
-      Hlt1B2PhiGamma_LTUNB[0]    = hlt1decision.hasSelectionName('Hlt1B2PhiGamma_LTUNBDecision')
-  
-    # init mc arrays
-    mcCands[0] = 0
-    for i in range(maxarraylen):
-      D0_MC_M[i]                  = -99999.
-      D0_MC_P[i]                  = -99999.
-      D0_MC_PT[i]                 = -99999.
-      D0_MC_PX[i]                 = -99999.
-      D0_MC_PY[i]                 = -99999.
-      D0_MC_PZ[i]                 = -99999.
-      D0_MC_E[i]                  = -99999.
-      D0_MC_PID[i]                = -99999
-      D0_MC_VTX_X[i]              = -99999.
-      D0_MC_VTX_Y[i]              = -99999.
-      D0_MC_VTX_Z[i]              = -99999.
-      D0_MC_VTX_CHI2[i]           = -99999.
-      D0_MC_VTX_nDOF[i]           = -99999.
-      D0_MC_DIRA[i]               = -99999.
-      D0_MC_FD[i]                 = -99999.
-      D0_MC_FD_CHI2[i]            = -99999.
-      D0_MC_CTAU[i]               = -99999.
-      D0_MC_TAU[i]                = -99999.
-      D0_MC_Daught1_PID[i]        = -99999
-      D0_MC_Daught1_M[i]          = -99999.
-      D0_MC_Daught1_P[i]          = -99999.
-      D0_MC_Daught1_PT[i]         = -99999.
-      D0_MC_Daught1_IP[i]         = -99999.
-      D0_MC_Daught1_IP_CHI2[i]    = -99999.
-      D0_MC_Daught1_Track_CHI2[i] = -99999.
-      D0_MC_Daught1_Track_nDOF[i] = -99999.
-      D0_MC_Daught2_PID[i]        = -99999
-      D0_MC_Daught2_M[i]          = -99999.
-      D0_MC_Daught2_P[i]          = -99999.
-      D0_MC_Daught2_PT[i]         = -99999.
-      D0_MC_Daught2_IP[i]         = -99999.
-      D0_MC_Daught2_IP_CHI2[i]    = -99999.
-      D0_MC_Daught2_Track_CHI2[i] = -99999.
-      D0_MC_Daught2_Track_nDOF[i] = -99999.
-  
-    # fill mc info
+      for hlt1 in HLT1_Lines:
+        setVal( hlt1decision.hasSelectionName('%sDecision'%hlt1), hlt1, res_tuple )
+
+    # fill mc candidate info
+    nMCCands = 0
     if mccands:
-      mcCands[0] = len(mcCands)
-      for i, mccand in enumerate(mcCands):
-        D0_MC_M[i]                   = mccand.momentum().M()
-        D0_MC_P[i]                   = mccand.p()
-        D0_MC_PT[i]                  = mccand.pt()
-        D0_MC_PX[i]                  = mccand.momentum().Px()
-        D0_MC_PY[i]                  = mccand.momentum().Py()
-        D0_MC_PZ[i]                  = mccand.momentum().Pz()
-        D0_MC_E[i]                   = mccand.momentum().E()
-        D0_MC_PID[i]                 = mccand.particleID().pid()
-
-        if mccand.endVertex():
-          D0_MC_VTX_X[i]               = mccand.endVertex().position().X()
-          D0_MC_VTX_Y[i]               = mccand.endVertex().position().Y()
-          D0_MC_VTX_Z[i]               = mccand.endVertex().position().Z()
-          D0_MC_VTX_CHI2[i]            = mccand.endVertex().chi2()
-          D0_MC_VTX_nDOF[i]            = mccand.endVertex().nDoF()
-
-        if len(mccand.daughters())>0:
-          daught1 = mccand.daughters()[0]
-          track1  = mccand.daughters()[0].proto().track()
-          D0_MC_Daught1_PID[i]         = daught1.particleID().pid()
-          D0_MC_Daught1_M[i]           = daught1.momentum().M()
-          D0_MC_Daught1_P[i]           = daught1.p()
-          D0_MC_Daught1_PT[i]          = daught1.pt()
-          D0_MC_Daught1_Track_CHI2[i]  = track1.chi2()
-          D0_MC_Daught1_Track_nDOF[i]  = track1.nDoF()
-          if mcpvs:
-            minip, minipchi2 = getMinIP(calc, track1, mcpvs)
-            D0_MC_Daught1_IP[i]      = minip
-            D0_MC_Daught1_IP_CHI2[i] = minipchi2
-
-        if len(mccand.daughters())>1:
-          daught2 = mccand.daughters()[1]
-          track2  = mccand.daughters()[1].proto().track()
-          D0_MC_Daught2_PID[i]         = daught2.particleID().pid()
-          D0_MC_Daught2_M[i]           = daught2.momentum().M()
-          D0_MC_Daught2_P[i]           = daught2.p()
-          D0_MC_Daught2_PT[i]          = daught2.pt()
-          D0_MC_Daught2_Track_CHI2[i]  = track2.chi2()
-          D0_MC_Daught2_Track_nDOF[i]  = track2.nDoF()
-          if mcpvs:
-            minip, minipchi2 = getMinIP(calc, track2, mcpvs)
-            D0_MC_Daught2_IP[i]      = minip
-            D0_MC_Daught2_IP_CHI2[i] = minipchi2
-        
-        if mcpvs:
-          mcpv = getPV(mccand, mcpvs)
-          D0_MC_DIRA[i] = getDira(mccand, mcpv)
-          fd     = ROOT.Double(0.)
-          fdchi2 = ROOT.Double(0.)
-          getFD(calc, mccand, mcpv, fd, fdchi2)
-          betagamma = mccand.momentum().P() / mccand.momentum().M()
-          D0_MC_FD[i]      = fd
-          D0_MC_FD_CHI2[i] = fdchi2
-          D0_MC_CTAU[i]    = fd / betagamma
-          D0_MC_TAU[i]     = ( fd /betagamma ) / 0.3
+      for mccand in mccands:  
+        fillCandInfo(calc, res_tuple, nMCCands, 'MC_Mother', mccand, mcpvs ) 
+        nMCCands += 1
     
-    # init online pv arrays
-    onPVs[0] = 0
-    for i in range(maxarraylen):
-      ON_PV_X[i]                  = -99999.
-      ON_PV_Y[i]                  = -99999.
-      ON_PV_Z[i]                  = -99999.
+    # fill mc pv info
+    nMCPVs = 0
+    if mcpvs:
+      for pv in mcpvs:
+        fillPVInfo( res_tuple, nMCPVs, 'MC_PV', pv )
+        nMCPVs += 1
 
-    if trigpvs:
-      for pv in trigpvs:
-        ON_PV_X[onPVs[0]] = pv.position().X()
-        ON_PV_Y[onPVs[0]] = pv.position().Y()
-        ON_PV_Z[onPVs[0]] = pv.position().Z()
-        onPVs[0] += 1
-
-    # init trig arrays
-    onCands[0] = 0
-    for i in range(maxarraylen):
-      D0_ON_M[i]                  = -99999.
-      D0_ON_P[i]                  = -99999.
-      D0_ON_PT[i]                 = -99999.
-      D0_ON_PX[i]                 = -99999.
-      D0_ON_PY[i]                 = -99999.
-      D0_ON_PZ[i]                 = -99999.
-      D0_ON_E[i]                  = -99999.
-      D0_ON_PID[i]                = -99999
-      D0_ON_VTX_X[i]              = -99999.
-      D0_ON_VTX_Y[i]              = -99999.
-      D0_ON_VTX_Z[i]              = -99999.
-      D0_ON_VTX_CHI2[i]           = -99999.
-      D0_ON_VTX_nDOF[i]           = -99999.
-      D0_ON_DIRA[i]               = -99999.
-      D0_ON_FD[i]                 = -99999.
-      D0_ON_FD_CHI2[i]            = -99999.
-      D0_ON_CTAU[i]               = -99999.
-      D0_ON_TAU[i]                = -99999.
-      D0_ON_Daught1_PID[i]        = -99999
-      D0_ON_Daught1_M[i]          = -99999.
-      D0_ON_Daught1_P[i]          = -99999.
-      D0_ON_Daught1_PT[i]         = -99999.
-      D0_ON_Daught1_IP[i]         = -99999.
-      D0_ON_Daught1_IP_CHI2[i]    = -99999.
-      D0_ON_Daught1_Track_CHI2[i] = -99999.
-      D0_ON_Daught1_Track_nDOF[i] = -99999.
-      D0_ON_Daught2_PID[i]        = -99999
-      D0_ON_Daught2_M[i]          = -99999.
-      D0_ON_Daught2_P[i]          = -99999.
-      D0_ON_Daught2_PT[i]         = -99999.
-      D0_ON_Daught2_IP[i]         = -99999.
-      D0_ON_Daught2_IP_CHI2[i]    = -99999.
-      D0_ON_Daught2_Track_CHI2[i] = -99999.
-      D0_ON_Daught2_Track_nDOF[i] = -99999.
-  
-    # fill trig cand info
+    # fill trig candidate info
+    nTrigCands = 0
     if trigcands:
       for candidate in trigcands:
         if candidate.currentStage().__getattribute__("is")('LHCb::Particle')():
           trigcand = candidate.currentStage().get('LHCb::Particle')()
           if not trigcand.isBasicParticle():
-            #print 'CANDIDATE FOUND ------'
-            #print 'nPVs:', len(trigpvs)
-            if not trigcand.particleID().abspid()==333: continue
-            D0_ON_M[onCands[0]]               = trigcand.momentum().M()
-            D0_ON_P[onCands[0]]               = trigcand.p()
-            D0_ON_PT[onCands[0]]              = trigcand.pt()
-            D0_ON_PX[onCands[0]]              = trigcand.momentum().Px()
-            D0_ON_PY[onCands[0]]              = trigcand.momentum().Py()
-            D0_ON_PZ[onCands[0]]              = trigcand.momentum().Pz()
-            D0_ON_E[onCands[0]]               = trigcand.momentum().E()
-            D0_ON_PID[onCands[0]]             = trigcand.particleID().pid()
-             
-            if trigcand.endVertex():
-              D0_ON_VTX_X[onCands[0]]           = trigcand.endVertex().position().X()
-              D0_ON_VTX_Y[onCands[0]]           = trigcand.endVertex().position().Y()
-              D0_ON_VTX_Z[onCands[0]]           = trigcand.endVertex().position().Z()
-              D0_ON_VTX_CHI2[onCands[0]]        = trigcand.endVertex().chi2()
-              D0_ON_VTX_nDOF[onCands[0]]        = trigcand.endVertex().nDoF()
+            fillCandInfo(calc, res_tuple, nTrigCands, 'Trig_Mother', trigcand, trigpvs )
+            nTrigCands += 1
+    
+    # fill trig pv info
+    nTrigPVs = 0
+    if trigpvs:
+      for pv in trigpvs:
+        fillPVInfo( res_tuple, nTrigPVs, 'Trig_PV', pv)
+        nTrigPVs += 1
 
-            if len(trigcand.daughters())>0:
-              daught1 = trigcand.daughters()[0]
-              if daught1.isBasicParticle() and daught1.proto().track():
-                track1  = daught1.proto().track()
-                D0_ON_Daught1_PID[onCands[0]]     = daught1.particleID().pid()
-                D0_ON_Daught1_M[onCands[0]]       = daught1.momentum().M()
-                D0_ON_Daught1_P[onCands[0]]       = daught1.p()
-                D0_ON_Daught1_PT[onCands[0]]      = daught1.pt()
-                D0_ON_Daught1_Track_CHI2[onCands[0]]  = track1.chi2()
-                D0_ON_Daught1_Track_nDOF[onCands[0]]  = track1.nDoF()
-                if trigpvs:
-                  minip, minipchi2 = getMinIP(calc, track1, trigpvs)
-                  D0_ON_Daught1_IP[onCands[0]]  = minip
-                  D0_ON_Daught1_IP_CHI2[onCands[0]] = minipchi2
-                  #print minip, minipchi2
-
-            if len(trigcand.daughters())>1:
-              daught2 = trigcand.daughters()[1]
-              if daught2.isBasicParticle() and daught2.proto().track():
-                track2  = daught2.proto().track()
-                D0_ON_Daught2_PID[onCands[0]]     = daught2.particleID().pid()
-                D0_ON_Daught2_M[onCands[0]]       = daught2.momentum().M()
-                D0_ON_Daught2_P[onCands[0]]       = daught2.p()
-                D0_ON_Daught2_PT[onCands[0]]      = daught2.pt()
-                D0_ON_Daught2_Track_CHI2[onCands[0]]  = track2.chi2()
-                D0_ON_Daught2_Track_nDOF[onCands[0]]  = track2.nDoF()
-                if trigpvs:
-                  minip, minipchi2 = getMinIP(calc, track2, trigpvs)
-                  D0_ON_Daught2_IP[onCands[0]]  = minip
-                  D0_ON_Daught2_IP_CHI2[onCands[0]] = minipchi2
-                  #print minip, minipchi2
-            
-            if trigpvs:
-              trigpv = getPV(trigcand, trigpvs)
-              D0_ON_DIRA[onCands[0]] = getDira(trigcand, trigpv)
-              fd     = ROOT.Double(0.)
-              fdchi2 = ROOT.Double(0.)
-              getFD(calc, trigcand, trigpv, fd, fdchi2)
-              betagamma = trigcand.momentum().P() / trigcand.momentum().M()
-              D0_ON_FD[onCands[0]]  = fd
-              D0_ON_FD_CHI2[onCands[0]] = fdchi2
-              D0_ON_CTAU[onCands[0]]= fd / betagamma
-              D0_ON_TAU[onCands[0]] = ( fd /betagamma ) / 0.3
-              
-            onCands[0] += 1
-
+    # fill from tuple here:
     outputTree.Fill()
 
   outputFile.Write()

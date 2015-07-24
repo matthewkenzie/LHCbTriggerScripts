@@ -59,7 +59,7 @@ else:
 #Moore().configLabel = 'ODINRandom acc=0, TELL1Error acc=1'
 
 #Moore().ThresholdSettings = 'Physics_draftEM2015'
-Moore().ThresholdSettings = 'Hlt1_Commissioning_Physics_2015'
+Moore().ThresholdSettings = 'Commissioning_Physics_2015'
 Moore().ForceSingleL0Configuration = False
 
 Moore().inputFiles   = run_opts.files
@@ -79,7 +79,7 @@ Moore().SkipEvents = 0
 #Moore().WriterRequires = [ 'Hlt1' ]
 #Moore().outputFile = '/data/bfys/graven/0x46/hlt1.raw'
 Moore().RemoveInputHltRawBanks = True
-Moore().Split = ''#'Hlt1'
+Moore().Split = 'Hlt1'
 Moore().EnableDataOnDemand = True
 from Configurables import MooreExpert
 MooreExpert().Hlt2Independent=True
@@ -101,5 +101,5 @@ gaudi = GaudiPython.AppMgr(outputlevel=3)
 gaudi.initialize()
 TES = gaudi.evtsvc()
 
-from trigtree import trigtree
+from trigtree import *
 trigtree(gaudi, TES, run_opts.MCFilterLoc, eventstorun, run_opts.output)

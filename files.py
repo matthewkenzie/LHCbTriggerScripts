@@ -69,7 +69,7 @@ MinBias_SPD_lt_420.DDDBtag = 'dddb-20140729'
 MinBias_SPD_lt_420.CondDBtag = 'sim-20140730-vc-md100'
 MinBias_SPD_lt_420.Simulation = True
 MinBias_SPD_lt_420.DataType = '2015'
-MinBias_SPD_lt_420.output  = 'MinBias_SPD_lt_420_Tuple.root'
+MinBias_SPD_lt_420.output  = 'MinBias_SPD_lt_420_Tuple_Full.root'
 MinBias_SPD_lt_420.files =    [  'root://eoslhcb.cern.ch//eos/lhcb/wg/HLT/MC2015_L0Processed/ldst/SPD_lt_420/MagDown/MC2015_MinBias_0xFF63_000.ldst',
                                  'root://eoslhcb.cern.ch//eos/lhcb/wg/HLT/MC2015_L0Processed/ldst/SPD_lt_420/MagDown/MC2015_MinBias_0xFF63_001.ldst',
                                  'root://eoslhcb.cern.ch//eos/lhcb/wg/HLT/MC2015_L0Processed/ldst/SPD_lt_420/MagDown/MC2015_MinBias_0xFF63_002.ldst',
@@ -209,7 +209,7 @@ SigMC_Bs2PhiPhi.TCK = '0xFF66'
 SigMC_Bs2PhiPhi.MCFilterLoc = 'SelBs2PhiPhi'
 SigMC_Bs2PhiPhi.runType = 'SigMC'
 SigMC_Bs2PhiPhi.DDDBtag = 'dddb-20140729'
-SigMC_Bs2PhiPhi.CondDBtag = 'sim-20140730-vc-md100'
+SigMC_Bs2PhiPhi.CondDBtag = 'sim-20140730-vc-mu100'
 SigMC_Bs2PhiPhi.Simulation = True
 SigMC_Bs2PhiPhi.DataType = '2015'
 SigMC_Bs2PhiPhi.output  = 'Bs2PhiPhi_FF66_Tuple.root'
